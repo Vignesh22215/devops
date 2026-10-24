@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Expense Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#f1f0ec;--card:#fff;--ink:#1d1d1b;--muted:#77756d;--line:#e0ded6;--accent:#2f5d50;--accent-ink:#fff;--danger:#b8392f;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141816;--card:#1d2420;--ink:#ecf0ec;--muted:#98a39b;--line:#2c3630;--accent:#6fcfb0;--accent-ink:#0b1f18;--danger:#ff8d82;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141816;--card:#1d2420;--ink:#ecf0ec;--muted:#98a39b;--line:#2c3630;--accent:#6fcfb0;--accent-ink:#0b1f18;--danger:#ff8d82;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;padding:28px 16px;display:flex;justify-content:center}
+main{width:100%;max-width:640px;display:grid;gap:16px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+h1{margin:0;font-size:1.6rem;letter-spacing:-.02em}
+.total{font-size:clamp(2.6rem,11vw,4rem);font-weight:700;letter-spacing:-.04em;line-height:1}
+.label{color:var(--muted);font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.ctl{display:flex;gap:8px;align-items:center}
+select,input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+form .wide{grid-column:1/-1}
+button{font:inherit;cursor:pointer;border:0}
+.add{grid-column:1/-1;padding:12px;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:grid;grid-template-columns:110px 1fr 90px;gap:10px;align-items:center;margin:10px 0;font-size:.95rem}
+.track{height:10px;background:var(--bg);border-radius:99px;overflow:hidden}
+.track i{display:block;height:100%;border-radius:99px}
+.amt{text-align:right;font-variant-numeric:tabular-nums}
+ul{list-style:none;margin:0;padding:0}
+li{display:grid;grid-template-columns:10px 1fr auto auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+li:last-child{border-bottom:0}
+.dot{width:10px;height:10px;border-radius:50%}
+.d small{display:block;color:var(--muted)}
+.del{background:transparent;color:var(--danger);padding:4px 8px}
+.empty{color:var(--muted);text-align:center;padding:16px 0}
+h2{margin:0 0 6px;font-size:1.05rem}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>Expense Tracker</h1>
+      <div class="label">Spent in <span id="mlabel"></span></div>
+      <div class="total" id="total">0</div>
+    </div>
+    <div class="ctl">
+      <input type="month" id="month" aria-label="Month">
+      <select id="cur" aria-label="Currency"><option>₹</option><option>$</option><option>€</option><option>£</option></select>
+    </div>
+  </div>
+
+  <form class="card" id="f">
+    <input class="wide" id="desc" placeholder="What did you spend on?" maxlength="60" required aria-label="Description">
+    <input id="amt" type="number" min="0.01" step="0.01" placeholder="Amount" required aria-label="Amount">
+    <select id="cat" aria-label="Category"></select>
+    <input class="wide" id="date" type="date" required aria-label="Date">
+    <button class="add" type="submit">Add expense</button>
+  </form>
+
+  <section class="card">
+    <h2>Where it went</h2>
+    <div id="break"></div>
+  </section>
+
+  <section class="card">
+    <h2>Expenses</h2>
+    <ul id="list"></ul>
+  </section>
+</main>
+<script>
+(function(){
+  var CATS={Food:"#e07a3f",Transport:"#3f8fe0",Bills:"#8a63d2",Shopping:"#d2517f",Fun:"#d8b132",Other:"#6c9a8b"};
+  var KEY="expense-tracker-v1", items=[], cur="₹";
+  var $=function(id){return document.getElementById(id)};
+
+  function normalizeItem(x){
+    var amt=Number(x&&x.amt);
+    var date=String(x&&x.date||"");
+    var cat=String(x&&x.cat||"Other");
+    return {
+      id:Number(x&&x.id)||Date.now()+Math.random(),
+      desc:String(x&&x.desc||"").trim(),
+      amt:Number.isFinite(amt)&&amt>0?amt:0,
+      cat:Object.prototype.hasOwnProperty.call(CATS, cat)?cat:"Other",
+      date:/^\d{4}-\d{2}-\d{2}$/.test(date)?date:today()
+    };
+  }
+
+  function normalizeItems(list){
+    return (Array.isArray(list)?list:[]).map(normalizeItem).filter(function(x){return x.amt>0&&x.desc&&x.date});
+  }
+
+  try{var s=JSON.parse(localStorage.getItem(KEY));if(s){items=normalizeItems(s.items||[]);cur=s.cur||"₹"}}catch(e){}
+  function save(){
+    items=normalizeItems(items);
+    try{localStorage.setItem(KEY,JSON.stringify({items:items,cur:cur}))}catch(e){}
+  }
+  function today(){var d=new Date(),p=function(n){return String(n).padStart(2,"0")};return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())}
+  function fmt(n){var val=Number(n)||0;return cur+val.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
+
+  Object.keys(CATS).forEach(function(c){var o=document.createElement("option");o.textContent=c;$("cat").appendChild(o)});
+  $("date").value=today(); $("month").value=today().slice(0,7); $("cur").value=cur;
+
+  function render(){
+    var m=$("month").value||today().slice(0,7);
+    var rows=items.filter(function(x){return x.date.slice(0,7)===m}).sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:Number(b.id)-Number(a.id)});
+    var total=rows.reduce(function(t,x){return t+Number(x.amt||0)},0);
+    $("total").textContent=fmt(total);
+    var dt=new Date(m+"-01T00:00:00");
+    $("mlabel").textContent=isNaN(dt)?m:dt.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+
+    var by={}; rows.forEach(function(x){by[x.cat]=(by[x.cat]||0)+Number(x.amt||0)});
+    var br=$("break"); br.innerHTML="";
+    var keys=Object.keys(by).sort(function(a,b){return by[b]-by[a]});
+    if(!keys.length){br.innerHTML='<div class="empty">No spending this month yet.</div>'}
+    keys.forEach(function(k){
+      var r=document.createElement("div"); r.className="row";
+      var n=document.createElement("span"); n.textContent=k;
+      var t=document.createElement("div"); t.className="track";
+      var i=document.createElement("i"); i.style.width=(total>0?(by[k]/total*100):0)+"%"; i.style.background=CATS[k]; t.appendChild(i);
+      var a=document.createElement("span"); a.className="amt"; a.textContent=fmt(by[k]);
+      r.append(n,t,a); br.appendChild(r);
+    });
+
+    var ul=$("list"); ul.innerHTML="";
+    if(!rows.length){var e=document.createElement("li");e.className="empty";e.style.display="block";e.textContent="Add your first expense above.";ul.appendChild(e)}
+    rows.forEach(function(x){
+      var item=x;
+      var li=document.createElement("li");
+      var dot=document.createElement("span"); dot.className="dot"; dot.style.background=CATS[item.cat]||"#999";
+      var d=document.createElement("div"); d.className="d";
+      var t=document.createElement("span"); t.textContent=item.desc;
+      var sm=document.createElement("small"); sm.textContent=item.cat+" · "+new Date(item.date+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"});
+      d.append(t,sm);
+      var a=document.createElement("span"); a.className="amt"; a.textContent=fmt(item.amt);
+      var b=document.createElement("button"); b.className="del"; b.textContent="Delete"; b.setAttribute("aria-label","Delete "+item.desc);
+      b.onclick=function(){items=items.filter(function(y){return y.id!==item.id});save();render()};
+      li.append(dot,d,a,b); ul.appendChild(li);
+    });
+  }
+
+  $("f").addEventListener("submit",function(e){
+    e.preventDefault();
+    var amt=parseFloat($("amt").value); if(!(amt>0))return;
+    items.push({id:Date.now(),desc:$("desc").value.trim(),amt:amt,cat:$("cat").value,date:$("date").value});
+    $("desc").value="";$("amt").value="";$("month").value=$("date").value.slice(0,7);
+    save();render();$("desc").focus();
+  });
+  $("month").onchange=render;
+  $("cur").onchange=function(){cur=$("cur").value;save();render()};
+  render();
+})();
+</script>
+</body>
+</html>
